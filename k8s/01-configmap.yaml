@@ -1,0 +1,18 @@
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: capstone
+data:
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "appdb"
+  DB_USER: "appuser" # a username isn't a secret on its own; the password is
+
+  CACHE_HOST: "memcached"
+  CACHE_PORT: "11211"
+
+  BROKER_HOST: "rabbitmq"
+  BROKER_PORT: "5672"
+  BROKER_USER: "guest"

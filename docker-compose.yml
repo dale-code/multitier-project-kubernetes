@@ -1,0 +1,51 @@
+# Phase 2 starter — skeleton only. Fill in the TODOs.
+# Requirement: one container per service, all five present, on a shared
+# network, config via env vars, DB data on a NAMED VOLUME.
+
+services:
+  # --- Reverse proxy: the ONLY public entry point --------------------
+  nginx:
+    image: nginx:latest
+    # TODO: publish a host port; mount your nginx.conf; depend on the app.
+    # TODO: proxy_pass to the app service by its service name.
+
+  # --- Application on Tomcat (built from your Dockerfile) -------------
+  app:
+    # TODO: build from your multi-stage Dockerfile (Maven build -> Tomcat run).
+    # build: ./app
+    # TODO: pass DB/cache/broker hostnames + credentials via environment.
+    # TODO: it depends on db, cache, and broker — but depends_on != "ready".
+
+  # --- PostgreSQL ----------------------------------------------------
+  db:
+    image: postgres:16
+    # TODO: env vars for db/user/password (from .env).
+    #   POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD must match what
+    #   the app expects (DB_NAME / DB_USER / DB_PASSWORD).
+    # TODO: a NAMED VOLUME so data survives `docker compose down`.
+    #
+    # The provided db/init.sql creates the schema + seed data. The postgres
+    # image auto-runs any *.sql mounted into /docker-entrypoint-initdb.d/
+    # — but ONLY on first init of an empty data volume. Mount it read-only:
+    #   volumes:
+    #     - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    #     - pgdata:/var/lib/postgresql/data
+    # (Note: if POSTGRES_DB already creates the database, init.sql's CREATE
+    #  DATABASE line simply no-ops — that's fine and intended.)
+
+  # --- Memcached -----------------------------------------------------
+  cache:
+    image: memcached:latest
+    # (Usually nothing else needed — but how does the app find it?)
+
+  # --- RabbitMQ ------------------------------------------------------
+  broker:
+    image: rabbitmq:3-management
+    # TODO: default user/pass via env. The management UI is handy for debugging.
+
+# TODO: declare the named volume(s) you referenced above.
+# volumes:
+#   ????:
+
+# TODO: do you need an explicit network, or is the default fine?
+# networks:

@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: capstone
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: capstone-app
+  template:
+    metadata:
+      labels:
+        app: capstone-app
+    spec:
+      containers:
+        - name: app
+          # TODO: replace with the image you built + pushed — see
+          # terraform-gke/README.md for the exact build/push commands.
+          # Matches the Artifact Registry repo Terraform provisions.
+          image: us-central1-docker.pkg.dev/multitier-k8s-deployement/capstone-images/capstone-app:v1
+          ports:
+            - containerPort: 8080
+      
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          resources:
+            # Requests are what the scheduler uses to decide which node
+            # this Pod fits on, and what the HPA below measures against.
+            # Limits are a hard ceiling the container can't exceed.
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 750m
+              memory: 768Mi
+    
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: capstone
+spec:
+  type: ClusterIP # internal only — nginx is the public face, the app tier never is
+  selector:
+    app: capstone-app
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-hpa
+  namespace: capstone
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

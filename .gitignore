@@ -1,0 +1,27 @@
+# Secrets & local config — NEVER commit these
+.env
+*.tfvars
+!*.tfvars.example
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*-key.json
+credentials.json
+kubeconfig*
+
+# Kubernetes secret manifests — only the .example template is committed
+k8s/02-secret.yaml
+
+# Vagrant
+.vagrant/
+
+# Build artifacts
+target/
+*.war
+*.jar
+
+# OS / editor
+.DS_Store
+.idea/
+*.swp

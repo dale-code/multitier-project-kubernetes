@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+project_id  = "your-gcp-project-id"
+region      = "us-central1"
+zone        = "us-central1-a"
+
+# Do NOT commit the real value. Consider generating it instead of typing one.
+db_password = "changeme"

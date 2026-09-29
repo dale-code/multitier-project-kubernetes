@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+zone       = "us-central1-a"
+
+# Optional overrides — defaults in variables.tf are fine for a demo:
+# cluster_name      = "capstone-gke"
+# node_machine_type = "e2-medium"
+# node_min_count    = 1
+# node_max_count    = 3
+# app_image_repo    = "capstone-images"
