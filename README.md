@@ -1,45 +1,53 @@
-# Multi-Tier Web App — Capstone (Student Repo)
+# Multi-Tier Notes App — Kubernetes on GKE
 
-> Starter scaffold. Read `PROJECT-SPEC.md` for the full requirements and rubric.
-> Everything here is a skeleton with TODOs — the implementation is yours.
+A five-tier web application, containerized and deployed to Google Cloud
+with Terraform (infrastructure) and Kubernetes (workload).
 
-## Stack (fixed)
+## Stack
 
-Nginx → Tomcat (Java/Spring `.war`, built with Maven) → PostgreSQL + Memcached + RabbitMQ.
-
-## The app is provided
-
-A working Spring Boot app lives in `app/` — **you don't write it, you deploy it.** It builds to `capstone.war` with `mvn package` and reads all connection settings from environment variables (see `app/src/main/resources/application.properties`). Endpoints: `GET /`, `POST /notes`, `GET /notes/count` (the count endpoint reports whether it was cache-served, which is how you prove the tiers are wired). To build it locally: `cd app && mvn package`.
-
-## Database setup is provided
-
-`db/init.sql` creates the database, the app role, the `note` table, and seed data. It's idempotent (safe to run repeatedly). Wire it into each phase:
-- **Compose:** mount it at `/docker-entrypoint-initdb.d/init.sql` (runs on first init of an empty volume).
-- **Vagrant / VM:** `sudo -u postgres psql -f /vagrant/db/init.sql`.
-
-The app also runs Hibernate with `ddl-auto=update`, so the table is ensured at boot too — the SQL and the app won't conflict. Just keep the credentials in `init.sql`, your `.env`, and your `tfvars` in sync (and change the default password before deploying to the cloud).
-
-## The three phases
-
-1. **Vagrant** — `Vagrantfile` + `provision/` — full stack on one VM.
-2. **Docker Compose** — `docker-compose.yml` + `app/Dockerfile` — one container per service.
-3. **Terraform + GCP** — deployed to the cloud via IaC. Two sibling implementations of this phase exist:
-   - `terraform/` — approach (a), a single Compute Engine VM running Docker Compose.
-   - `terraform-gke/` + `k8s/` — **approach (c), the one actually deployed here**: Terraform provisions a GKE cluster; the five tiers run as Kubernetes objects (Deployments, Services, ConfigMaps, Secrets, a PersistentVolumeClaim, an Ingress) inside it. See `k8s/README.md` for exactly which file demonstrates which Kubernetes concept.
-
-## Fill this in as you go
-
-### Running Phase 1
 ```
-# TODO: exact commands
+Nginx  ->  Tomcat (Java/Spring, .war built with Maven)  ->  PostgreSQL + Memcached + RabbitMQ
 ```
 
-### Running Phase 2
-```
-# TODO: exact commands
-```
+- **Nginx** — reverse proxy, the only public-facing tier.
+- **App** — a Spring Boot app packaged as a WAR and run on Tomcat. Endpoints: `GET /`, `POST /notes`, `GET /notes/count` (the count endpoint reports whether it was served from cache, which is how you can prove the tiers are actually wired together).
+- **PostgreSQL** — persistent storage for notes.
+- **Memcached** — caches the note count.
+- **RabbitMQ** — publishes an event on every new note.
 
-### Running Phase 3 (approach c — GKE)
+The app itself lives in `app/` — source, `Dockerfile`, and
+`application.properties`, which reads every connection setting from
+environment variables (see `app/src/main/resources/application.properties`).
+The same image runs unmodified regardless of what supplies those
+variables; only the environment changes.
+
+`db/init.sql` creates the database, the app role, the `note` table, and
+seed data. It's idempotent (safe to run more than once) and is loaded
+into the cluster as a ConfigMap that Postgres runs on first init — see
+`k8s/03-postgres.yaml`. The app also runs Hibernate with
+`ddl-auto=update`, so the table is ensured at boot too; the SQL and the
+app won't conflict.
+
+## How it's deployed
+
+Two layers, kept deliberately separate:
+
+- **`terraform-gke/`** — provisions the actual Google Cloud
+  infrastructure: a dedicated VPC-native VPC/subnet, a GKE Standard
+  cluster with an autoscaling node pool, and an Artifact Registry repo
+  for the app image. See `terraform-gke/README.md` for the reasoning
+  behind each choice.
+- **`k8s/`** — the five tiers as Kubernetes objects: a `Namespace`,
+  `ConfigMap`s, a `Secret`, per-tier `Deployment`s and `Service`s, a
+  `PersistentVolumeClaim` for Postgres, a `HorizontalPodAutoscaler` on
+  the app tier, and an `Ingress` in front of Nginx. See
+  `k8s/README.md` for exactly which file demonstrates which core
+  Kubernetes concept (Pod, ReplicaSet, Deployment, Service, ConfigMap,
+  Secret, PersistentVolume, Namespace, Ingress), and
+  `KUBERNETES-TEACHING-GUIDE.md` for a full line-by-line walkthrough of
+  every file in the project.
+
+## Running it
 
 ```bash
 # 1. Provision the cluster + supporting infra
@@ -69,39 +77,36 @@ kubectl apply -f .
 kubectl get ingress capstone-ingress -n capstone -w
 ```
 
-**Reviewer must supply:** their own GCP `project_id` (billing-enabled), and
-run `gcloud auth login` / `gcloud auth application-default login` before
+You'll need your own GCP `project_id` (billing-enabled), and to run
+`gcloud auth login` / `gcloud auth application-default login` before
 `terraform apply`. Everything else is scripted.
+
+Full, dated command history — including the troubleshooting along the
+way — is in `COMMANDS.md`.
 
 To tear down: `kubectl delete -f k8s/` then `terraform -chdir=terraform-gke destroy`
 (or just `terraform destroy` — deleting the cluster takes the workloads with it).
 
-## Decisions (you must document these)
+## Design decisions
 
-- **Phase 3 deployment approach chosen: (c), GKE/Kubernetes.** Chosen
-  because the project also requires demonstrating Kubernetes' core
-  objects (Pods, Deployments, ReplicaSets, Services, ConfigMaps,
-  Secrets, PersistentVolumes, Namespaces, Ingress) in the deployed
-  files themselves — approach (a)'s single VM never touches any of
-  those, so it can't satisfy that half of the assignment. Full
-  reasoning in `terraform-gke/README.md`.
-- **Where Terraform state lives:** local, per Terraform root (`terraform/`
-  and `terraform-gke/` each have their own state — they provision
-  independent infrastructure and were never meant to share state). A
-  commented-out GCS backend is left in `terraform-gke/providers.tf` for
-  anyone who wants remote state; it's off by default since it needs a
-  pre-existing bucket.
-- **How secrets are handled at each phase:**
-  - *Vagrant:* read from the environment on the VM, never hardcoded in `provision/setup.sh`.
-  - *Compose:* `.env` (gitignored), documented by `.env.example`.
-  - *Terraform (a):* `terraform.tfvars` (gitignored), documented by `terraform.tfvars.example`; passed to the VM's startup script as metadata, not baked into an image.
-  - *Terraform-gke + Kubernetes (c):* Terraform itself carries no app secrets at all — the GKE cluster and Artifact Registry repo it creates don't need any. App-level secrets (DB/broker passwords) live in a Kubernetes `Secret` object (`k8s/02-secret.example.yaml` is the template; the real one is created directly with `kubectl create secret` or from a gitignored `k8s/02-secret.yaml` copy) and are injected into Pods as env vars — never committed, never in a container image.
-
-## Checklist before submitting
-
-- [ ] `vagrant destroy -f && vagrant up` works with zero manual steps
-- [ ] `docker compose down && docker compose up` works; DB data persists
-- [ ] `terraform apply` yields a working public URL in outputs
-- [ ] `terraform destroy` leaves nothing billable
-- [ ] No secrets, state, `.env`, or `*.tfvars` committed (check `git status`!)
-- [ ] `architecture.md` diagram matches what actually runs
+- **Kubernetes over a single VM.** The whole point of this deployment
+  is for the required Kubernetes objects (Pods, Deployments,
+  ReplicaSets, Services, ConfigMaps, Secrets, PersistentVolumes,
+  Namespaces, Ingress) to be real, working parts of the system — not
+  just described. A single-VM deployment never touches any of those.
+- **Terraform for infrastructure, `kubectl` for workload.** The
+  cluster is slow/expensive to recreate and changes rarely; the
+  Kubernetes objects change constantly while iterating. Splitting them
+  means editing a probe timeout doesn't require touching cluster
+  state. Full reasoning in `terraform-gke/README.md`.
+- **Where Terraform state lives:** local (no backend configured). A
+  commented-out GCS backend is left in `terraform-gke/providers.tf`
+  for remote state — off by default since it needs a pre-existing
+  bucket.
+- **How secrets are handled:** Terraform itself carries no app
+  secrets — the cluster and registry it creates don't need any.
+  App-level secrets (DB/broker passwords) live in a Kubernetes
+  `Secret` object (`k8s/02-secret.example.yaml` is the template; the
+  real one is a gitignored `k8s/02-secret.yaml`, or created directly
+  with `kubectl create secret`) and are injected into Pods as
+  environment variables — never committed, never baked into the image.

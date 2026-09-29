@@ -1,10 +1,6 @@
 # Architecture
 
-Two Phase-3 deployment targets exist for this repo (see root README's
-"Decisions" section for why). This document describes both, but the
-one actually deployed is the GKE/Kubernetes path.
-
-## Diagram — GKE / Kubernetes (approach c, deployed)
+## Diagram
 
     Internet
        |
@@ -36,19 +32,6 @@ one actually deployed is the GKE/Kubernetes path.
 
     All of the above lives inside one Kubernetes Namespace: "capstone".
 
-## Diagram — VM/Compose-on-GCE (approach a, alternate, not deployed)
-
-    Internet
-       |
-       v
-    [ Nginx ]  :80/:443  <-- only public tier, on a single Compute Engine VM
-       |
-       v
-    [ Tomcat / App ]
-       |     |     |
-       v     v     v
-    [ DB ] [Cache] [Broker]   <-- all internal only, same VM, own containers
-
 ## Public vs internal
 
 - **Public:** only the GCP Load Balancer created by the Ingress, which
@@ -74,15 +57,31 @@ storage (a cache and, in this scope, a queue are both treated as
 disposable/rebuildable) — see the "intentionally not here" note in
 `k8s/README.md`.
 
+## Scaling and self-healing
+
+- The app tier's `Deployment` keeps 2–5 Pods alive via its
+  `ReplicaSet`; a `HorizontalPodAutoscaler` (`k8s/06-app.yaml`) moves
+  the replica count within that range based on CPU usage.
+- The GKE node pool (`terraform-gke/gke.tf`) autoscales nodes between
+  `node_min_count` and `node_max_count`, and has `auto_repair`
+  enabled — Google replaces nodes that fail health checks.
+- Every tier's Deployment carries liveness/readiness probes, so a
+  wedged container gets restarted and a not-yet-ready one is pulled
+  out of its Service's rotation automatically.
+
 ## Where each secret comes from
 
-| Phase | Secret source |
-|---|---|
-| Vagrant | Environment variables on the VM, read by `provision/setup.sh`. Never hardcoded in the script. |
-| Compose | `.env` file (gitignored), documented by `.env.example`. |
-| Terraform (a) — GCE VM | `terraform.tfvars` (gitignored), documented by `terraform.tfvars.example`; passed to the VM as startup-script metadata. |
-| Terraform-gke + Kubernetes (c) | A Kubernetes `Secret` object in the `capstone` namespace (`k8s/02-secret.example.yaml` is the template — copy to a gitignored `k8s/02-secret.yaml`, or create directly with `kubectl create secret generic app-secrets ...`). Injected into Pods as env vars via `secretKeyRef`/`secretRef`; never baked into the app image, never committed. |
+Terraform carries no application secrets — the cluster and Artifact
+Registry repo it creates don't need any. App-level secrets
+(DB/broker passwords) live in a Kubernetes `Secret` object in the
+`capstone` namespace (`k8s/02-secret.example.yaml` is the template —
+copy to a gitignored `k8s/02-secret.yaml`, or create directly with
+`kubectl create secret generic app-secrets ...`). They're injected
+into Pods as env vars via `secretKeyRef`/`secretRef`; never baked into
+the app image, never committed.
 
 See `k8s/README.md` for the full map of which file demonstrates which
-required Kubernetes concept (Pod, Service, ReplicaSet, Deployment,
-ConfigMap, Secret, PersistentVolume, Namespace, Ingress).
+Kubernetes concept (Pod, Service, ReplicaSet, Deployment, ConfigMap,
+Secret, PersistentVolume, Namespace, Ingress), and
+`KUBERNETES-TEACHING-GUIDE.md` for a line-by-line walkthrough of every
+file in the project.
