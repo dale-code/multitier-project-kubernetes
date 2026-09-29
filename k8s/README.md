@@ -48,20 +48,6 @@ curl http://$INGRESS_IP/                 # touches Tomcat/app
 curl -X POST http://$INGRESS_IP/notes -d '...'   # touches Postgres + RabbitMQ
 curl http://$INGRESS_IP/notes/count      # reports cache-served or not — proves Memcached is wired in
 ```
-
-## What's intentionally NOT here
-
-- **StatefulSet** — Postgres uses a plain Deployment + PVC (single
-  replica) rather than a StatefulSet. A StatefulSet is the
-  production-correct choice for a database (stable network identity,
-  ordered/rolling storage per replica) but isn't one of the nine
-  required concepts, and a single-replica Deployment demonstrates the
-  same PVC + Deployment relationship more simply. Worth knowing the
-  gap exists.
-- **NetworkPolicy** — nothing here restricts which Pods can talk to
-  which. All isolation is at the Service level (nothing except nginx
-  has a public path) and the GCP firewall level (`terraform-gke/network.tf`),
-  not Pod-to-Pod. A real production namespace would likely add
   NetworkPolicies to also stop, say, the app tier from being able to
   reach the RabbitMQ management port. Not required here, so left out
   rather than added unexplained.
